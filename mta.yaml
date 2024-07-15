@@ -1,0 +1,98 @@
+_schema-version: "3.1"
+ID: gttService
+description: A simple CAP project.
+version: 1.0.0
+modules:
+- name: gttService-srv
+  type: nodejs
+  path: gen/srv
+  properties:
+    gttAuth: Basic cmlzaGFiaC5zdXJhbmFAbmF2LWl0LmNvbTpTdXJhbmFANTMxMjE=
+    gttURL: https://nav-gtt01-4vifgdob.gtt-flp-lbnplatform.cfapps.eu10.hana.ondemand.com/api/outbound/odata/v1/com.navgtt014vifgdob.gtt.app.gttft1.gttft1Service
+    eventURL: https://nav-gtt01-4vifgdob.gtt-flp-lbnplatform.cfapps.eu10.hana.ondemand.com/api/inbound/rest/v1/com.navgtt014vifgdob.gtt.app.gttft1.gttft1WriteService
+    lbnAuth: Basic cmlzaGFiaC5zdXJhbmFAbmF2LWl0LmNvbTpTdXJhbmFANTMxMjE=
+    lbnURL: https://nav-gtt01-4vifgdob.gtt-flp-lbnplatform.cfapps.eu10.hana.ondemand.com/api/location/v1
+    itemDest: http://103.152.79.22:8002/sap/opu/odata/sap/ZCHECKIN_VEHICLE_SRV_01
+    itemAuth: Basic QlRQX0RFVjpTYXBANjU0MzIx
+    eventPrefix: com.navgtt014vifgdob.gtt.app.gttft1.Shipment
+  requires:
+  - name: gttService-auth
+  - name: gttService-dest-srv
+  provides:
+  - name: srv-api
+    properties:
+      srv-url: ${default-url}
+  parameters:
+    buildpack: nodejs_buildpack
+  build-parameters:
+    builder: npm
+- name: gttService-destinationcontent
+  type: com.sap.application.content
+  build-parameters:
+      no-source: true
+  requires:
+      - name: srv-api
+      - name: gttService-auth
+        parameters:
+          service-key:
+            name: gttService-auth-key
+      - name: gttService_html_repo_host
+        parameters:
+          service-key:
+            name: gttService-html5-repo-host-key
+      - name: gttService-dest-srv
+        parameters:
+          content-target: true
+  parameters:
+      content:
+        subaccount:
+          existing_destinations_policy: update
+          destinations:
+            - Name: gttService-srv
+              URL: ~{srv-api/srv-url}
+              Authentication: OAuth2ClientCredentials
+              TokenServiceInstanceName: gttService-auth
+              TokenServiceKeyName: gttService-auth-key        
+resources:
+- name: gttService-auth
+  type: org.cloudfoundry.managed-service
+  parameters:
+    config:
+      tenant-mode: dedicated
+      xsappname: gttService-${org}-${space}
+    path: ./xs-security.json
+    service: xsuaa
+    service-plan: application
+- name: gttService_html_repo_host
+  type: org.cloudfoundry.managed-service
+  parameters:
+    service: html5-apps-repo
+    service-plan: app-host
+- name: gttService-dest-srv
+  type: org.cloudfoundry.managed-service
+  requires:
+      - name: srv-api
+  parameters:
+      service: destination
+      service-plan: lite
+      config:
+        version: 1.0.0
+        HTML5Runtime_enabled: true
+        init_data:
+          instance:
+            existing_destinations_policy: update
+            destinations:
+              - Name: gttService-srv
+                URL: ~{srv-api/srv-url}
+                Authentication: NoAuthentication
+                Type: HTTP
+                ProxyType: Internet
+                HTML5.ForwardAuthToken: true
+                HTML5.DynamicDestination: true
+parameters:
+  enable-parallel-deployments: true
+build-parameters:
+  before-all:
+  - builder: custom
+    commands:
+    - npx cds build --production

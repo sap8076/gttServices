@@ -1,0 +1,10 @@
+POST  http://localhost:4004/odata/v4/gtt/updateDelivery
+Content-Type: application/json 
+
+{
+    "FoId": "6300001284",
+    "LocationId": "0000000011",
+    "ItemNo": "10",
+    "ProductId": "100000002",
+    "ActQty": "8"
+}
