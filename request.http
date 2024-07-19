@@ -8,3 +8,25 @@ Content-Type: application/json
     "ProductId": "100000002",
     "ActQty": "8"
 }
+  
+# @server = http://localhost:4004
+@server = http://localhost:4004
+
+
+####OData-V4#####
+POST {{server}}/odata/v4/gtt/updateDelivery 
+Content-Type:  application/json
+{
+    "FoId": "6300001284",
+    "LocationId": "0000000011",
+    "ItemNo": "10",
+    "ProductId": "100000002",
+    "ActQty": "8"
+}
+####OData-V2#####
+GET {{server}}/odata/v4/gtt/trackingDetails HTTP/1.1
+Content-Type:  application/json
+
+
+# GET {{server}}/odata/v4/gtt/trackingDetails HTTP/1.1
+# Content-Type:  application/json

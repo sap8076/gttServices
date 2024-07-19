@@ -7,13 +7,13 @@ modules:
   type: nodejs
   path: gen/srv
   properties:
-    gttAuth: Basic cmlzaGFiaC5zdXJhbmFAbmF2LWl0LmNvbTpTdXJhbmFANTMxMjE=
-    gttURL: https://nav-gtt01-4vifgdob.gtt-flp-lbnplatform.cfapps.eu10.hana.ondemand.com/api/outbound/odata/v1/com.navgtt014vifgdob.gtt.app.gttft1.gttft1Service
-    eventURL: https://nav-gtt01-4vifgdob.gtt-flp-lbnplatform.cfapps.eu10.hana.ondemand.com/api/inbound/rest/v1/com.navgtt014vifgdob.gtt.app.gttft1.gttft1WriteService
-    lbnAuth: Basic cmlzaGFiaC5zdXJhbmFAbmF2LWl0LmNvbTpTdXJhbmFANTMxMjE=
-    lbnURL: https://nav-gtt01-4vifgdob.gtt-flp-lbnplatform.cfapps.eu10.hana.ondemand.com/api/location/v1
-    itemDest: http://103.152.79.22:8002/sap/opu/odata/sap/ZCHECKIN_VEHICLE_SRV_01
-    itemAuth: Basic QlRQX0RFVjpTYXBANjU0MzIx
+    # gttAuth: Basic cmlzaGFiaC5zdXJhbmFAbmF2LWl0LmNvbTpTdXJhbmFANTMxMjE=
+    # gttURL: https://nav-gtt01-4vifgdob.gtt-flp-lbnplatform.cfapps.eu10.hana.ondemand.com/api/outbound/odata/v1/com.navgtt014vifgdob.gtt.app.gttft1.gttft1Service
+    # eventURL: https://nav-gtt01-4vifgdob.gtt-flp-lbnplatform.cfapps.eu10.hana.ondemand.com/api/inbound/rest/v1/com.navgtt014vifgdob.gtt.app.gttft1.gttft1WriteService
+    # lbnAuth: Basic cmlzaGFiaC5zdXJhbmFAbmF2LWl0LmNvbTpTdXJhbmFANTMxMjE=
+    # lbnURL: https://nav-gtt01-4vifgdob.gtt-flp-lbnplatform.cfapps.eu10.hana.ondemand.com/api/location/v1
+    # itemDest: http://103.152.79.22:8002/sap/opu/odata/sap/ZCHECKIN_VEHICLE_SRV_01
+    # itemAuth: Basic QlRQX0RFVjpTYXBANjU0MzIx
     eventPrefix: com.navgtt014vifgdob.gtt.app.gttft1.Shipment
   requires:
   - name: gttService-auth
@@ -93,6 +93,8 @@ parameters:
   enable-parallel-deployments: true
 build-parameters:
   before-all:
-  - builder: custom
-    commands:
-    - npx cds build --production
+    - builder: custom
+      commands:
+        - npm ci
+        - npx cds build --production
+

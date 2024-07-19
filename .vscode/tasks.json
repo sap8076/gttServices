@@ -5,10 +5,10 @@
   "tasks": [
     {
       "type": "shell",
-      "label": "cds watch",
+      "label": "cds ",
       "command": "cds",
       "args": [
-        "watch"
+        "watch "
       ],
       "group": {
         "kind": "build",

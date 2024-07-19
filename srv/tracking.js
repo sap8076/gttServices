@@ -1,5 +1,6 @@
 const cds = require("@sap/cds");
 const axios = require("axios");
+const { header, param } = require("express/lib/request");
 module.exports = cds.service.impl(async function () {
     const {
         trackingDetails,
@@ -15,55 +16,65 @@ module.exports = cds.service.impl(async function () {
     this.on("updateStatus", updateStatus);
     this.on("updateDelivery", updateDelivery);
 })
+
+const trackingId = 6300001454
+
 const getTrackingDetails = async (req, res) => {
+
     try {
-        var gttAPI = process.env.gttURL + '/Shipment?$filter=trackingId eq ' + "'" + req.query.SELECT.where[2].val + "'";
-        let res = await axios({
+       
+       
+        const GTTapi = await cds.connect.to('GTTdest');
+        //let gttAPI = "/outbound/odata/v1/com.navgtt014vifgdob.gtt.app.gttft1.gttft1Service" + '/Shipment?$filter=trackingId eq ' + "'" + trackingId + "'";
+        let expand  =  '&$expand=stops,freightUnitTPs,freightUnitTPs/freightUnit,freightUnitTPs/freightUnit/freightUnitItems,plannedEvents'
+        let gttAPI = `/outbound/odata/v1/com.navgtt014vifgdob.gtt.app.gttft1.gttft1Service/Shipment?$filter=trackingId eq '${trackingId}'${expand}&$format=json`;
+        
+        const res = await GTTapi.send({
             method: 'GET',
-            url: gttAPI,
+            path: gttAPI,
             headers: {
-                Authorization: process.env.gttAuth,
-                Accept: "application/json"
+                "Content-Type": "application/json",
             },
-            params: {
-                $expand: 'stops,plannedEvents,freightUnitTPs,freightUnitTPs/freightUnit,freightUnitTPs/freightUnit/freightUnitItems',
-                $format: 'json'
-            }
+           
         });
-        var s4items = process.env.itemDest + '/itemDataSet?$filter=FoId eq ' + "'" + req.query.SELECT.where[2].val + "'";
-        let itemRes = await axios({
+        console.log("res",res)
+        const itemDest = await cds.connect.to('S4HANA');
+        let s4items = `/itemDataSet?$filter=FoId eq '${trackingId}'&$format=json`;
+        let itemRes = await itemDest.send({
             method: 'GET',
-            url: s4items,
+            path: s4items,
             headers: {
-                Authorization: process.env.itemAuth,
-                Accept: "application/json"
+                "Content-Type": "application/json",
             },
-            params: {
-                $format: 'json'
-            }
+           
+
         });
-        var trackingDetails = [];
+        
+        console.log("s4items",itemRes)
+        const trackingDetails = [];
         const depart = 'com.navgtt014vifgdob.gtt.app.gttft1.Shipment.Departure';
         const arrive = 'com.navgtt014vifgdob.gtt.app.gttft1.Shipment.Arrival';
         const pod = 'com.navgtt014vifgdob.gtt.app.gttft1.Shipment.POD';
         const eventReported = 'REPORTED';
         const eventLateReported = 'LATE_REPORTED';
         const eventEarlyReported = 'EARLY_REPORTED';
-        for (i = 0; i < res.data.d.results[0].stops.results.length; i++) {
-            var lbnAPI = process.env.lbnURL + '/Location?$filter=externalId eq ' + "'" + res.data.d.results[0].stops.results[i].locationId + "'";
-            let reslbn = await axios({
+      
+         
+        for (i = 0; i < res[0].stops.length; i++) {
+            let lbnAPI = `/location/v1/Location?$filter=externalId eq '${res[0].stops[i].locationId}'&$format=json`;
+
+            const reslbn = await GTTapi.send({
                 method: 'GET',
-                url: lbnAPI,
+                path: lbnAPI,
+
                 headers: {
-                    Authorization: process.env.lbnAuth,
-                    Accept: "application/json"
+                    "Content-Type": "application/json",
                 },
-                params: {
-                    $format: 'json'
-                }
+
             });
-            var resobj = {};
-            let plannedEvent = res.data.d.results[0].plannedEvents.results.filter(obj => obj.locationAltKey === reslbn.data.d.results[0].locationAltKey);
+            console.log(reslbn)
+            let resobj = {};
+            let plannedEvent = res[0].plannedEvents.filter(obj => obj.locationAltKey === reslbn[0].locationAltKey);
             if (plannedEvent.filter(obj => obj.eventType === depart) && ((plannedEvent.find(obj => obj.eventStatus_code === eventReported)) || (plannedEvent.find(obj => obj.eventStatus_code === eventEarlyReported)) || (plannedEvent.find(obj => obj.eventStatus_code === eventLateReported))))
                 resobj.isDeparted = 'X';
             let plannedArrive = plannedEvent.filter(obj => obj.eventType === arrive);
@@ -75,54 +86,58 @@ const getTrackingDetails = async (req, res) => {
             }
             if (plannedEvent.filter(obj => obj.eventType === pod) && ((plannedEvent.find(obj => obj.eventStatus_code === eventReported)) || (plannedEvent.find(obj => obj.eventStatus_code === eventEarlyReported)) || (plannedEvent.find(obj => obj.eventStatus_code === eventLateReported))))
                 resobj.isDelivered = 'X';
-            resobj.shipmentNo = res.data.d.results[0].shipmentNo;
-            resobj.altKey = res.data.d.results[0].altKey;
-            resobj.locationId = res.data.d.results[0].stops.results[i].locationId;
-            resobj.ordinalNo = res.data.d.results[0].stops.results[i].ordinalNo;
-            resobj.stopId = res.data.d.results[0].stops.results[i].stopId;
-            resobj.locationDescription = reslbn.data.d.results[0].locationDescription;
-            resobj.addressDetail = reslbn.data.d.results[0].addressDetail;
-            resobj.longitude = reslbn.data.d.results[0].longitude;
-            resobj.latitude = reslbn.data.d.results[0].latitude;
-            resobj.locationAltKey = reslbn.data.d.results[0].locationAltKey;
+            resobj.shipmentNo = res[0].shipmentNo;
+            resobj.altKey = res[0].altKey;
+            resobj.locationId = res[0].stops[i].locationId;
+            resobj.ordinalNo = res[0].stops[i].ordinalNo;
+            resobj.stopId = res[0].stops[i].stopId;
+            resobj.locationDescription = reslbn[0].locationDescription;
+            resobj.addressDetail = reslbn[0].addressDetail;
+            resobj.longitude = reslbn[0].longitude;
+            resobj.latitude = reslbn[0].latitude;
+            resobj.locationAltKey = reslbn[0].locationAltKey;
             resobj.materialLoad = '10';
             resobj.materialUnload = '0';
             //resobj.plannedDepTime = 'Jan 10, 2024, 11:10:00 AM';
-            resobj.plannedDistance = res.data.d.results[0].plannedTotalDistance;
-            resobj.plannedDistanceUom = res.data.d.results[0].plannedTotalDistanceUoM;
+            resobj.plannedDistance = res[0].plannedTotalDistance;
+            resobj.plannedDistanceUom = res[0].plannedTotalDistanceUoM;
             if (i == 0) {
                 resobj.isArrived = 'X';
                 resobj.isDelivered = 'X';
-                console.log(res.data.d.results[0].plannedDepartureDateTime);
-                resobj.plannedDepTime = new Date(parseInt(res.data.d.results[0].plannedDepartureDateTime.match(/(\d+)/)[0])).toLocaleString('en-UK', res.data.d.results[0].plannedDepartureDateTimeZone) + ' ' + res.data.d.results[0].plannedDepartureDateTimeZone;
-                resobj.timeZone = res.data.d.results[0].plannedDepartureDateTimeZone;
-                resobj.materialLoad = res.data.d.results[0].cargoQuantity + res.data.d.results[0].quantityUoM;
+                console.log(res[0].plannedDepartureDateTime);
+                resobj.plannedDepTime = new Date(parseInt(res[0].plannedDepartureDateTime.match(/(\d+)/)[0])).toLocaleString('en-UK', res[0].plannedDepartureDateTimeZone) + ' ' + res[0].plannedDepartureDateTimeZone;
+                resobj.timeZone = res[0].plannedDepartureDateTimeZone;
+                resobj.materialLoad = res[0].cargoQuantity + res[0].quantityUoM;
             }
             let aItems = [];
-            for (j = 0; j < itemRes.data.d.results.length; j++) {
+            for (j = 0; j < itemRes.length; j++) {
                 let items = {};
-                if (itemRes.data.d.results[j].LocationId == resobj.locationId) {
-                    items.ordinalNo = res.data.d.results[0].stops.results[i].ordinalNo;
-                    items.itemNo = itemRes.data.d.results[j].ItemNo;
-                    items.productId = itemRes.data.d.results[j].ProductId;
-                    items.itemDesc = itemRes.data.d.results[j].ItemDescr;
-                    items.dispQty = itemRes.data.d.results[j].ActQty;
-                    items.rcvQty = itemRes.data.d.results[j].ActQty;
-                    items.uom = itemRes.data.d.results[j].Unit;
-                    items.category = itemRes.data.d.results[j].ItemCat;
+                if (itemRes[j].LocationId == resobj.locationId) {
+                    items.ordinalNo = res[0].stops[i].ordinalNo;
+                    items.itemNo = itemRes[j].ItemNo;
+                    items.productId = itemRes[j].ProductId;
+                    items.itemDesc = itemRes[j].ItemDescr;
+                    items.dispQty = itemRes[j].ActQty;
+                    items.rcvQty = itemRes[j].ActQty;
+                    items.uom = itemRes[j].Unit;
+                    items.category = itemRes[j].ItemCat;
                     aItems.push(items);
                 }
             }
+            console.log("-------aITem-----------------",aItems)
             resobj.Items = aItems;
             trackingDetails.push(resobj);
+            console.log("------------------tracking details",JSON.stringify(trackingDetails))
+          
         }
-        if (res?.data?.d?.results.length < 1) {
+        if (res?.results.length < 1) {
             return {
-                departureLocationId: '',
-                arrivalLocationId: ''
+                departurelocationId: '',
+                arrivallocationId: ''
             };
         }
-        return trackingDetails;
+        
+        return  trackingDetails
     }
     catch (error) {
 
@@ -133,30 +148,34 @@ const getTrackingDetails = async (req, res) => {
 }
 const getTrackingItems = async (req, res) => {
     try {
-        var s4items = process.env.itemDest + '/itemDataSet?$filter=FoId eq ' + "'" + req.query.SELECT.where[2].val + "'" + '& LocationId eq' + + "'" + req.query.SELECT.where[6].val + "'";
-        let itemRes = await axios({
+        //const GTTapi = await cds.connect.to('GTTdest');
+        const itemDest = await cds.connect.to('S4HANA');
+        let s4items = '/itemDataSet?$filter=FoId eq ' + "'" + trackingId + "'" + '& locationId eq' + + "'" + req.query.SELECT.where[6].val + "'";
+        const itemRes = await itemDest.send({
             method: 'GET',
-            url: s4items,
+            path: s4items,
+
             headers: {
-                Authorization: process.env.itemAuth,
-                Accept: "application/json"
+                "Content-Type": "application/json",
             },
-            params: {
+            param: {
                 $format: 'json'
             }
+
         });
-        var trackingItems = [];
-        for (j = 0; j < itemRes.data.d.results.length; j++) {
+        console.log("asdfasdfas",res)
+        let trackingItems = [];
+        for (j = 0; j < itemRes.results.length; j++) {
             let items = {};
-            items.FoId == itemRes.data.d.results[j].FoId
-            items.LocationId == itemRes.data.d.results[j].LocationId;
-            items.itemNo = itemRes.data.d.results[j].ItemNo;
-            items.productId = itemRes.data.d.results[j].ProductId;
-            items.itemDesc = itemRes.data.d.results[j].ItemDescr;
-            items.dispQty = itemRes.data.d.results[j].ActQty;
-            items.rcvQty = itemRes.data.d.results[j].ActQty;
-            items.uom = itemRes.data.d.results[j].Unit;
-            items.category = itemRes.data.d.results[j].ItemCat;
+            items.FoId == itemRes[j].FoId
+            items.locationId == itemRes[j].locationId;
+            items.itemNo = itemRes[j].ItemNo;
+            items.productId = itemRes[j].ProductId;
+            items.itemDesc = itemRes[j].ItemDescr;
+            items.dispQty = itemRes[j].ActQty;
+            items.rcvQty = itemRes[j].ActQty;
+            items.uom = itemRes[j].Unit;
+            items.category = itemRes[j].ItemCat;
             trackingItems.push(items);
         }
         return trackingItems;
@@ -168,7 +187,7 @@ const getTrackingItems = async (req, res) => {
     }
 }
 const getunplannedEvents = async (req, res) => {
-
+    
     let unplannedEvents = [];
     let unplannedEvent = {};
     unplannedEvent.eventCode = 'LocationUpdate';
@@ -195,27 +214,29 @@ const getunplannedEvents = async (req, res) => {
     unplannedEvent.eventName = 'Other';
     unplannedEvents.push(unplannedEvent);
     unplannedEvent = {};
+    console.log("----------------------uplannedEvent-----------------------------",unplannedEvents)
     return unplannedEvents;
 }
 const getreasonCodes = async (req, res) => {
     try {
-        var gttAPI = process.env.gttURL + '/EventReasonCode';
-        let res = await axios({
+        const GTTapi = await cds.connect.to('GTTdest');
+        let gttAPI = + '/EventReasonCode';
+        const res = await GTTapi.send({
             method: 'GET',
-            url: gttAPI,
+            path: gttAPI,
+
             headers: {
-                Authorization: process.env.gttAuth,
-                Accept: "application/json"
+                "Content-Type": "application/json",
             },
-            params: {
-                $format: 'json'
-            }
+           
+
         });
-        var reasonCodes = [];
-        for (i = 0; i < res.data.d.results.length; i++) {
+        console.log("==================getresoncode============",res)
+        let reasonCodes = [];
+        for (i = 0; i < res.length; i++) {
             let reasonCode = {};
-            reasonCode.code = res.data.d.results[i].code;
-            reasonCode.name = res.data.d.results[i].name;
+            reasonCode.code = res[i].code;
+            reasonCode.name = res[i].name;
             reasonCodes.push(reasonCode);
         }
         return reasonCodes;
@@ -295,16 +316,30 @@ const updateStatus = async (req, res) => {
                     ]
                 };
             console.log(postData)
-            let res = await axios({
-                method: 'POST',
-                url: gttAPI,
-                headers: {
-                    Authorization: process.env.gttAuth,
-                    'Content-Type': 'application/json',
-                    'LBN-GTT-Input-Data-Attachments-Flag': 'true'
-                },
-                data: postData
-            });
+            
+        const GTTapi = await cds.connect.to('GTTdest');
+        //let gttAPI = "/outbound/odata/v1/com.navgtt014vifgdob.gtt.app.gttft1.gttft1Service" + '/Shipment?$filter=trackingId eq ' + "'" + trackingId + "'";
+        let gttAPI = `/outbound/odata/v1/com.navgtt014vifgdob.gtt.app.gttft1.gttft1Service/Shipment?$filter=trackingId eq '${trackingId}'&$format=json`;
+        
+        const res = await GTTapi.send({
+            method: 'POST',
+            path: gttAPI,
+            data: postData,
+            headers: {
+                "Content-Type": "application/json",
+            },
+           
+        });
+            // let res = await axios({
+            //     method: 'POST',
+            //     url: gttAPI,
+            //     headers: {
+            //         Authorization: process.env.gttAuth,
+            //         'Content-Type': 'application/json',
+            //         'LBN-GTT-Input-Data-Attachments-Flag': 'true'
+            //     },
+            //     data: postData
+            // });
         }
         else if (req.data.reasonCode) {
             postData = {
@@ -330,17 +365,17 @@ const updateStatus = async (req, res) => {
                 longitude: parseFloat((req.data.eventLong).toFixed(9)),
                 latitude: parseFloat((req.data.eventLat).toFixed(9)),
             }
-            let res = await axios({
+            const res = await GTTapi.send({
                 method: 'POST',
-                url: gttAPI,
+                path: gttAPI,
+                data: postData,
                 headers: {
-                    Authorization: process.env.gttAuth,
-                    'Content-Type': 'application/json'
+                    "Content-Type": "application/json",
                 },
-                data: postData
+               
             });
         }
-        var strMsg = 'Event - ' + eventName + ' posted scuccessfully!';
+        let strMsg = 'Event - ' + eventName + ' posted scuccessfully!';
         return { status: strMsg };
     } catch (err) {
         console.log("error - " + err);
@@ -366,8 +401,8 @@ const updateDelivery = async (req, res) => {
             data: postData,
             headers: headers
         });
-        var strMsg = 'Update successfully!';
-        return { status: strMsg };
+        let strMsg = 'Update successfully!';
+        return { status: strMsg, response };
     } catch (err) {
         console.log("error - " + err);
         req.error(404, err.message);

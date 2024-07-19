@@ -23,6 +23,15 @@
   "cds": {
     "requires": {
       "auth": "mocked",
+      "GTTdest": {
+        "kind":"odata-v2",
+        "csrf": true,
+        "csrfInBatch": true,
+        "credentials": {
+          "destination": "GTT"
+        
+        }
+      },
       "S4HANA": {
         "kind": "odata-v2",
         "csrf": true,
