@@ -17,7 +17,7 @@ module.exports = cds.service.impl(async function () {
     this.on("updateDelivery", updateDelivery);
 })
 
-const trackingId = 6300001454
+const tracking  = 6300001454
 
 const getTrackingDetails = async (req, res) => {
 
@@ -25,9 +25,9 @@ const getTrackingDetails = async (req, res) => {
        
        
         const GTTapi = await cds.connect.to('GTTdest');
-        //let gttAPI = "/outbound/odata/v1/com.navgtt014vifgdob.gtt.app.gttft1.gttft1Service" + '/Shipment?$filter=trackingId eq ' + "'" + trackingId + "'";
+        //let gttAPI = "/outbound/odata/v1/com.navgtt014vifgdob.gtt.app.gttft1.gttft1Service" + '/Shipment?$filter=req.query.SELECT.where[2].val eq ' + "'" + req.query.SELECT.where[2].val + "'";
         let expand  =  '&$expand=stops,freightUnitTPs,freightUnitTPs/freightUnit,freightUnitTPs/freightUnit/freightUnitItems,plannedEvents'
-        let gttAPI = `/outbound/odata/v1/com.navgtt014vifgdob.gtt.app.gttft1.gttft1Service/Shipment?$filter=trackingId eq '${trackingId}'${expand}&$format=json`;
+        let gttAPI = `/outbound/odata/v1/com.navgtt014vifgdob.gtt.app.gttft1.gttft1Service/Shipment?$filter=trackingId eq '${req.query.SELECT.where[2].val}'${expand}&$format=json`;
         
         const res = await GTTapi.send({
             method: 'GET',
@@ -39,7 +39,7 @@ const getTrackingDetails = async (req, res) => {
         });
         console.log("res",res)
         const itemDest = await cds.connect.to('S4HANA');
-        let s4items = `/itemDataSet?$filter=FoId eq '${trackingId}'&$format=json`;
+        let s4items = `/itemDataSet?$filter=FoId eq '${req.query.SELECT.where[2].val}'&$format=json`;
         let itemRes = await itemDest.send({
             method: 'GET',
             path: s4items,
@@ -60,84 +60,105 @@ const getTrackingDetails = async (req, res) => {
         const eventEarlyReported = 'EARLY_REPORTED';
       
          
-        for (i = 0; i < res[0].stops.length; i++) {
+        for (let i = 0; i < res[0].stops.length; i++) {
             let lbnAPI = `/location/v1/Location?$filter=externalId eq '${res[0].stops[i].locationId}'&$format=json`;
-
-            const reslbn = await GTTapi.send({
-                method: 'GET',
-                path: lbnAPI,
-
-                headers: {
-                    "Content-Type": "application/json",
-                },
-
-            });
-            console.log(reslbn)
-            let resobj = {};
-            let plannedEvent = res[0].plannedEvents.filter(obj => obj.locationAltKey === reslbn[0].locationAltKey);
-            if (plannedEvent.filter(obj => obj.eventType === depart) && ((plannedEvent.find(obj => obj.eventStatus_code === eventReported)) || (plannedEvent.find(obj => obj.eventStatus_code === eventEarlyReported)) || (plannedEvent.find(obj => obj.eventStatus_code === eventLateReported))))
-                resobj.isDeparted = 'X';
-            let plannedArrive = plannedEvent.filter(obj => obj.eventType === arrive);
-            if (plannedArrive.length > 0) {
-                resobj.plannedDepTime = (new Date(parseInt(plannedArrive[0].plannedBusinessTimestamp.match(/(\d+)/)[0])).toLocaleString('en-UK', plannedArrive[0].plannedBusinessTimeZone)) + ' ' + plannedArrive[0].plannedBusinessTimeZone;
-                resobj.timeZone = plannedArrive[0].plannedBusinessTimeZone;
-                if ((plannedEvent.find(obj => obj.eventStatus_code === eventReported)) || (plannedEvent.find(obj => obj.eventStatus_code === eventEarlyReported)) || (plannedEvent.find(obj => obj.eventStatus_code === eventLateReported)))
-                    resobj.isArrived = 'X';
-            }
-            if (plannedEvent.filter(obj => obj.eventType === pod) && ((plannedEvent.find(obj => obj.eventStatus_code === eventReported)) || (plannedEvent.find(obj => obj.eventStatus_code === eventEarlyReported)) || (plannedEvent.find(obj => obj.eventStatus_code === eventLateReported))))
-                resobj.isDelivered = 'X';
-            resobj.shipmentNo = res[0].shipmentNo;
-            resobj.altKey = res[0].altKey;
-            resobj.locationId = res[0].stops[i].locationId;
-            resobj.ordinalNo = res[0].stops[i].ordinalNo;
-            resobj.stopId = res[0].stops[i].stopId;
-            resobj.locationDescription = reslbn[0].locationDescription;
-            resobj.addressDetail = reslbn[0].addressDetail;
-            resobj.longitude = reslbn[0].longitude;
-            resobj.latitude = reslbn[0].latitude;
-            resobj.locationAltKey = reslbn[0].locationAltKey;
-            resobj.materialLoad = '10';
-            resobj.materialUnload = '0';
-            //resobj.plannedDepTime = 'Jan 10, 2024, 11:10:00 AM';
-            resobj.plannedDistance = res[0].plannedTotalDistance;
-            resobj.plannedDistanceUom = res[0].plannedTotalDistanceUoM;
-            if (i == 0) {
-                resobj.isArrived = 'X';
-                resobj.isDelivered = 'X';
-                console.log(res[0].plannedDepartureDateTime);
-                resobj.plannedDepTime = new Date(parseInt(res[0].plannedDepartureDateTime.match(/(\d+)/)[0])).toLocaleString('en-UK', res[0].plannedDepartureDateTimeZone) + ' ' + res[0].plannedDepartureDateTimeZone;
-                resobj.timeZone = res[0].plannedDepartureDateTimeZone;
-                resobj.materialLoad = res[0].cargoQuantity + res[0].quantityUoM;
-            }
-            let aItems = [];
-            for (j = 0; j < itemRes.length; j++) {
-                let items = {};
-                if (itemRes[j].LocationId == resobj.locationId) {
-                    items.ordinalNo = res[0].stops[i].ordinalNo;
-                    items.itemNo = itemRes[j].ItemNo;
-                    items.productId = itemRes[j].ProductId;
-                    items.itemDesc = itemRes[j].ItemDescr;
-                    items.dispQty = itemRes[j].ActQty;
-                    items.rcvQty = itemRes[j].ActQty;
-                    items.uom = itemRes[j].Unit;
-                    items.category = itemRes[j].ItemCat;
-                    aItems.push(items);
+    
+            try {
+                // Fetch location data
+                const reslbn = await GTTapi.send({
+                    method: 'GET',
+                    path: lbnAPI,
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                });
+    
+                if (reslbn.length === 0) {
+                    console.warn(`No data found for locationId: ${res[0].stops[i].locationId}`);
+                    continue;  // Skip to the next iteration if no data is found
                 }
+    
+                let resobj = {};
+                let locationData = reslbn[0];
+                let plannedEvent = res[0].plannedEvents.filter(obj => obj.locationAltKey === locationData.locationAltKey);
+    
+                // Check for the departure status
+                if (plannedEvent.some(obj => obj.eventType === depart && 
+                    [eventReported, eventEarlyReported, eventLateReported].includes(obj.eventStatus_code))) {
+                    resobj.isDeparted = 'X';
+                }
+    
+                // Check for the arrival status and set planned departure time
+                let plannedArrive = plannedEvent.filter(obj => obj.eventType === arrive);
+                if (plannedArrive.length > 0) {
+                    resobj.plannedDepTime = (new Date(parseInt(plannedArrive[0].plannedBusinessTimestamp.match(/(\d+)/)[0])).toLocaleString('en-UK', { timeZone: plannedArrive[0].plannedBusinessTimeZone })) + ' ' + plannedArrive[0].plannedBusinessTimeZone;
+                    resobj.timeZone = plannedArrive[0].plannedBusinessTimeZone;
+                    if (plannedEvent.some(obj => [eventReported, eventEarlyReported, eventLateReported].includes(obj.eventStatus_code))) {
+                        resobj.isArrived = 'X';
+                    }
+                }
+    
+                // Check for the delivery status
+                if (plannedEvent.some(obj => obj.eventType === pod && 
+                    [eventReported, eventEarlyReported, eventLateReported].includes(obj.eventStatus_code))) {
+                    resobj.isDelivered = 'X';
+                }
+    
+                // Populate resobj with basic information
+                resobj.shipmentNo = res[0].shipmentNo;
+                resobj.altKey = res[0].altKey;
+                resobj.locationId = res[0].stops[i].locationId;
+                resobj.ordinalNo = res[0].stops[i].ordinalNo;
+                resobj.stopId = res[0].stops[i].stopId;
+                resobj.locationDescription = locationData.locationDescription;
+                resobj.addressDetail = locationData.addressDetail;
+                resobj.longitude = locationData.longitude;
+                resobj.latitude = locationData.latitude;
+                resobj.locationAltKey = locationData.locationAltKey;
+                resobj.materialLoad = '10';
+                resobj.materialUnload = '0';
+                resobj.plannedDistance = res[0].plannedTotalDistance;
+                resobj.plannedDistanceUom = res[0].plannedTotalDistanceUoM;
+    
+                // For the first stop, set additional fields
+                if (i === 0) {
+                    resobj.isArrived = 'X';
+                    resobj.isDelivered = 'X';
+                    resobj.plannedDepTime = new Date(parseInt(res[0].plannedDepartureDateTime.match(/(\d+)/)[0])).toLocaleString('en-UK', { timeZone: res[0].plannedDepartureDateTimeZone }) + ' ' + res[0].plannedDepartureDateTimeZone;
+                    resobj.timeZone = res[0].plannedDepartureDateTimeZone;
+                    resobj.materialLoad = res[0].cargoQuantity + res[0].quantityUoM;
+                }
+    
+                // Collect items for this stop
+                let aItems = [];
+                for (let j = 0; j < itemRes.length; j++) {
+                    if (itemRes[j].LocationId === resobj.locationId) {
+                        aItems.push({
+                            ordinalNo: res[0].stops[i].ordinalNo,
+                            itemNo: itemRes[j].ItemNo,
+                            productId: itemRes[j].ProductId,
+                            itemDesc: itemRes[j].ItemDescr,
+                            dispQty: itemRes[j].ActQty,
+                            rcvQty: itemRes[j].ActQty,
+                            uom: itemRes[j].Unit,
+                            category: itemRes[j].ItemCat,
+                        });
+                    }
+                }
+                resobj.Items = aItems;
+    
+                trackingDetails.push(resobj);
+    
+                console.log("------------------tracking details", JSON.stringify(trackingDetails));
+    
+            } catch (error) {
+                console.error(`Failed to fetch location for locationId: ${res[0].stops[i].locationId}`, error);
             }
-            console.log("-------aITem-----------------",aItems)
-            resobj.Items = aItems;
-            trackingDetails.push(resobj);
-            console.log("------------------tracking details",JSON.stringify(trackingDetails))
-          
         }
-        if (res?.results.length < 1) {
-            return {
-                departurelocationId: '',
-                arrivallocationId: ''
-            };
-        }
-        
-        return  trackingDetails
+    
+        // Return all collected tracking details
+        return trackingDetails;
+    
     }
     catch (error) {
 
@@ -146,11 +167,14 @@ const getTrackingDetails = async (req, res) => {
         };
     }
 }
+
+
 const getTrackingItems = async (req, res) => {
     try {
-        //const GTTapi = await cds.connect.to('GTTdest');
+       
         const itemDest = await cds.connect.to('S4HANA');
-        let s4items = '/itemDataSet?$filter=FoId eq ' + "'" + trackingId + "'" + '& locationId eq' + + "'" + req.query.SELECT.where[6].val + "'";
+        //let s4items ="/itemDataSet?$filter=FoId eq '6300001284'&$format=json"
+        let s4items = `/itemDataSet?$filter=FoId eq '${req.query.SELECT.where[2].val}'&locationId eq '${req.query.SELECT.where[6].val}&$format=json`;
         const itemRes = await itemDest.send({
             method: 'GET',
             path: s4items,
@@ -158,14 +182,12 @@ const getTrackingItems = async (req, res) => {
             headers: {
                 "Content-Type": "application/json",
             },
-            param: {
-                $format: 'json'
-            }
+           
 
         });
-        console.log("asdfasdfas",res)
+        //console.log("asdfasdfas",itemRes)
         let trackingItems = [];
-        for (j = 0; j < itemRes.results.length; j++) {
+        for (j = 0; j < itemRes.length; j++) {
             let items = {};
             items.FoId == itemRes[j].FoId
             items.locationId == itemRes[j].locationId;
@@ -178,6 +200,7 @@ const getTrackingItems = async (req, res) => {
             items.category = itemRes[j].ItemCat;
             trackingItems.push(items);
         }
+        console.log("---------------trackingItems----------",trackingItems)
         return trackingItems;
     }
     catch (error) {
@@ -253,7 +276,8 @@ const updateStatus = async (req, res) => {
     try {
         if (req.data.eventName)
             var eventName = (req.data.eventName).trim();
-        gttAPI = process.env.eventURL + '/' + eventName;
+        //gttAPI = process.env.eventURL + '/' + eventName;
+        let gttAPI = `/inbound/rest/v1/com.navgtt014vifgdob.gtt.app.gttft1.gttft1WriteService/${eventName}`
         let postData = {};
         if (req.data.signature || req.data.podImage) {
             if (req.data.signature && req.data.podImage)
@@ -318,8 +342,8 @@ const updateStatus = async (req, res) => {
             console.log(postData)
             
         const GTTapi = await cds.connect.to('GTTdest');
-        //let gttAPI = "/outbound/odata/v1/com.navgtt014vifgdob.gtt.app.gttft1.gttft1Service" + '/Shipment?$filter=trackingId eq ' + "'" + trackingId + "'";
-        let gttAPI = `/outbound/odata/v1/com.navgtt014vifgdob.gtt.app.gttft1.gttft1Service/Shipment?$filter=trackingId eq '${trackingId}'&$format=json`;
+        //let gttAPI = "/outbound/odata/v1/com.navgtt014vifgdob.gtt.app.gttft1.gttft1Service" + '/Shipment?$filter=req.query.SELECT.where[2].val eq ' + "'" + req.query.SELECT.where[2].val + "'";
+       ;
         
         const res = await GTTapi.send({
             method: 'POST',
@@ -330,16 +354,7 @@ const updateStatus = async (req, res) => {
             },
            
         });
-            // let res = await axios({
-            //     method: 'POST',
-            //     url: gttAPI,
-            //     headers: {
-            //         Authorization: process.env.gttAuth,
-            //         'Content-Type': 'application/json',
-            //         'LBN-GTT-Input-Data-Attachments-Flag': 'true'
-            //     },
-            //     data: postData
-            // });
+       
         }
         else if (req.data.reasonCode) {
             postData = {
